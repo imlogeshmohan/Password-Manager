@@ -104,10 +104,10 @@ def is_main_password_exist():
         return True
 
 
-def setup_main_password(main_password_file, salt):
+def setup_main_password(main_password_file, salt, pattern):
     main_password = password_var.get()
     main_password_hash = generate_key(main_password, salt)
-    encry_main_password_hash = generate_encrypted_word(main_password_hash.decode(), pattern="")  # add your own pattern
+    encry_main_password_hash = generate_encrypted_word(main_password_hash.decode(), pattern= pattern)  # add your own pattern
     save_data((salt, encry_main_password_hash), main_password_file)
     messagebox.showinfo("success","Password saved successfully.")
     password_var.set("")
@@ -148,10 +148,10 @@ def update_data_with_new_key(data_file, old_key, new_key):
 
 
 
-def main_password_checker(main_password_file, output_label):
+def main_password_checker(main_password_file, output_label , pattern):
     label1_var.set("Enter main password")
     salt, encry_stored_main_password_hash = load_data(main_password_file)
-    stored_main_password_hash = decrypt_encrypted_word(encry_stored_main_password_hash, pattern="").encode()
+    stored_main_password_hash = decrypt_encrypted_word(encry_stored_main_password_hash, pattern=pattern).encode()
 
     main_password = password_var.get()
     main_password_hash = generate_key(main_password, salt)
@@ -496,7 +496,7 @@ def change_main_password(data_file, stored_main_password_hash, output_label, cur
     
     _, encry_stored_main_password_hash = load_data(main_password_file)
 
-    stored_main_password_hash = decrypt_encrypted_word(encry_stored_main_password_hash, pattern="").encode()
+    stored_main_password_hash = decrypt_encrypted_word(encry_stored_main_password_hash, pattern="453607").encode()
 
     if current_password_hash != stored_main_password_hash:
         output_label.config(text="Incorrect current password.")
@@ -511,7 +511,7 @@ def change_main_password(data_file, stored_main_password_hash, output_label, cur
         output_label.after(3000, lambda: output_label.config(text=""))
     else:
         new_password_hash = generate_key(new_password, salt)
-        encry_new_password_hash = generate_encrypted_word(new_password_hash.decode(), pattern="")
+        encry_new_password_hash = generate_encrypted_word(new_password_hash.decode(), pattern="453607")
 
         save_data((salt, encry_new_password_hash), main_password_file)
         output_label.config(text="Main password changed successfully. Closing application in 5 sec to apply changes.")
@@ -910,7 +910,7 @@ def decrypt_selected_files(directory, selected_indices, stored_main_password_has
     messagebox.showinfo("Decryption Status", f"{num_files_decrypted} file(s) decrypted successfully.")
     list_files_in_directory(directory, file_name_listbox)
 
-
+pattern = "453607"
 salt = os.urandom(16)
 main_password_file = 'data\main_password.pickle'
 data_file = 'data\password_data.pickle'
@@ -942,11 +942,11 @@ input_frame = ttk.Frame(master=window)
 
 entry_field = ttk.Entry(master=input_frame, textvariable=password_var, font=("Helvetica", 12), show="*", width=20)
 entry_field.pack(side=tk.LEFT, padx=5, pady=5)
-entry_field.bind('<Return>', lambda event: main_password_checker(main_password_file, out_label)if is_main_password_exist() else setup_main_password(main_password_file, salt))
+entry_field.bind('<Return>', lambda event: main_password_checker(main_password_file, out_label, pattern)if is_main_password_exist() else setup_main_password(main_password_file, salt, pattern=pattern))
 
 button = ttk.Button(master=input_frame, text="Enter",
-                    command=lambda: main_password_checker(main_password_file, output_label=out_label) if is_main_password_exist()
-                    else setup_main_password(main_password_file, salt), width=10)
+                    command=lambda: main_password_checker(main_password_file, output_label=out_label, pattern = pattern) if is_main_password_exist()
+                    else setup_main_password(main_password_file, salt, pattern), width=10)
 button.pack(side=tk.LEFT, padx=5, pady=5)
 
 out_label = ttk.Label(master=window, text="Output", textvariable=output_var, font=("Helvetica", 12))
