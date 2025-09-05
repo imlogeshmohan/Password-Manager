@@ -8,12 +8,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const passwordList = document.getElementById('password-list');
   const addPasswordButton = document.getElementById('add-password-button');
+  const logoutButton = document.createElement('button');
+  logoutButton.textContent = "Logout";
+  logoutButton.id = "logout-button";
+
 
   const websiteInput = document.getElementById('website');
   const usernameInput = document.getElementById('username');
   const passwordInput = document.getElementById('password');
   const savePasswordButton = document.getElementById('save-password-button');
   const cancelAddPasswordButton = document.getElementById('cancel-add-password-button');
+
+  chrome.storage.local.get('loggedIn', (data) => {
+    if (data.loggedIn) {
+      loginView.style.display = 'none';
+      passwordListView.style.display = 'block';
+      passwordListView.appendChild(logoutButton);
+      loadPasswords();
+    }
+  });
 
   loginButton.addEventListener('click', () => {
     const masterPassword = masterPasswordInput.value;
@@ -27,8 +40,10 @@ document.addEventListener('DOMContentLoaded', function() {
     .then(response => response.json())
     .then(data => {
       if (data.message) {
+        chrome.storage.local.set({ loggedIn: true });
         loginView.style.display = 'none';
         passwordListView.style.display = 'block';
+        passwordListView.appendChild(logoutButton);
         loadPasswords();
       } else {
         alert(data.error);
@@ -38,6 +53,13 @@ document.addEventListener('DOMContentLoaded', function() {
       console.error('Error:', error);
       alert('Could not connect to the server. Make sure the desktop app is running.');
     });
+  });
+
+  logoutButton.addEventListener('click', () => {
+    chrome.storage.local.set({ loggedIn: false });
+    loginView.style.display = 'block';
+    passwordListView.style.display = 'none';
+    passwordListView.removeChild(logoutButton);
   });
 
   addPasswordButton.addEventListener('click', () => {
@@ -84,14 +106,34 @@ document.addEventListener('DOMContentLoaded', function() {
       passwordList.innerHTML = '';
       data.forEach(item => {
         const li = document.createElement('li');
-        li.textContent = `${item.website} - ${item.username}`;
-        const copyButton = document.createElement('button');
-        copyButton.textContent = 'Copy';
-        copyButton.onclick = () => {
-            navigator.clipboard.writeText(item.password);
-            alert('Password copied to clipboard');
+
+        const detailsDiv = document.createElement('div');
+        detailsDiv.className = 'password-item-details';
+
+        const websiteSpan = document.createElement('span');
+        websiteSpan.className = 'website-name';
+        websiteSpan.textContent = item.website;
+        detailsDiv.appendChild(websiteSpan);
+
+        const usernameSpan = document.createElement('span');
+        usernameSpan.className = 'username';
+        usernameSpan.textContent = item.username;
+        detailsDiv.appendChild(usernameSpan);
+
+        li.appendChild(detailsDiv);
+
+        const autofillButton = document.createElement('button');
+        autofillButton.textContent = 'Autofill';
+        autofillButton.onclick = () => {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                chrome.tabs.sendMessage(tabs[0].id, {
+                    action: 'autofill',
+                    username: item.username,
+                    password: item.password
+                });
+            });
         };
-        li.appendChild(copyButton);
+        li.appendChild(autofillButton);
         passwordList.appendChild(li);
       });
     })

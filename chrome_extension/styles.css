@@ -1,46 +1,116 @@
 body {
-  font-family: Arial, sans-serif;
-  width: 300px;
-  padding: 10px;
+  font-family: 'Poppins', sans-serif;
+  width: 350px;
+  padding: 0;
+  margin: 0;
+  background-color: #141418;
+  color: #fff;
 }
 
 h1, h2 {
   text-align: center;
+  font-weight: 600;
+}
+
+h1 {
+    font-size: 22px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    color: #7B6CFF;
+}
+
+h2 {
+    font-size: 18px;
+    margin-bottom: 20px;
+}
+
+#login-view, #add-password-view, #password-list-view {
+    padding: 20px;
 }
 
 input[type="text"], input[type="password"] {
-  width: 90%;
-  padding: 8px;
-  margin-bottom: 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 15px;
+  border: 1px solid #333;
+  border-radius: 10px;
+  background-color: #181a1f;
+  color: #fff;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+input[type="text"]::placeholder, input[type="password"]::placeholder {
+    color: #888;
 }
 
 button {
   width: 100%;
-  padding: 10px;
-  background-color: #007bff;
+  padding: 12px;
+  background-color: #7B6CFF;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 10px;
   cursor: pointer;
-  margin-top: 5px;
+  margin-top: 10px;
+  font-size: 16px;
+  font-weight: 500;
+  transition: background-color 0.3s;
 }
 
 button:hover {
-  background-color: #0056b3;
+  background-color: #9B8CFF;
 }
 
 ul {
   list-style-type: none;
   padding: 0;
+  margin: 0;
 }
 
 li {
-  padding: 8px;
-  border-bottom: 1px solid #ddd;
+  padding: 15px;
+  border-bottom: 1px solid #333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 li:last-child {
   border-bottom: none;
+}
+
+.password-item-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.website-name {
+    font-weight: 500;
+    font-size: 16px;
+}
+
+.username {
+    font-size: 12px;
+    color: #aaa;
+}
+
+.copy-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    padding: 5px;
+}
+
+#add-password-button {
+    margin-top: 20px;
+}
+
+#cancel-add-password-button {
+    background-color: #444;
+}
+
+#cancel-add-password-button:hover {
+    background-color: #666;
 }
