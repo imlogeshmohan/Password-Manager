@@ -61,29 +61,38 @@ def generate_key(password, salt):
     return base64.urlsafe_b64encode(key)
 
 
+import json
+
 def encrypt_data(data, key):
     f = Fernet(key)
-    encrypted_data = f.encrypt(pickle.dumps(data))
-    return encrypted_data
+    return f.encrypt(json.dumps(data).encode('utf-8'))
 
 
 def decrypt_data(encrypted_data, key):
     f = Fernet(key)
     try:
-        data = pickle.loads(f.decrypt(encrypted_data))
-        return data
+        decrypted_data = f.decrypt(encrypted_data)
+        return json.loads(decrypted_data.decode('utf-8'))
     except InvalidToken:
-        messagebox.showerror("Error","Invalid key")
+        messagebox.showerror("Error", "Invalid key")
+        return None
 
 def save_data(data, filename):
-    with open(filename, 'wb') as file:
-        pickle.dump(data, file)
+    if isinstance(data, dict):
+        with open(filename, 'w') as file:
+            json.dump(data, file, indent=4)
+    else:
+        with open(filename, 'wb') as file:
+            pickle.dump(data, file)
 
 
 def load_data(filename):
-    with open(filename, 'rb') as file:
-        data = pickle.load(file)
-    return data
+    try:
+        with open(filename, 'r') as file:
+            return json.load(file)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        with open(filename, 'rb') as file:
+            return pickle.load(file)
 
 
 def is_main_password_exist(main_password_file):
@@ -92,61 +101,25 @@ def is_main_password_exist(main_password_file):
     else:
         return True
 
-def generate_password(website_entry, username_entry, password_entry):
-    website = website_entry.get()
-    username  = username_entry.get()
+import random
+import string
 
-    if not website or not username:
-            messagebox.showerror("Error", "Please enter website and username.")
-            return
+def generate_random_password(length=12, use_uppercase=True, use_lowercase=True, use_digits=True, use_symbols=True):
+    """Generates a random password with customizable options."""
+    characters = ""
+    if use_uppercase:
+        characters += string.ascii_uppercase
+    if use_lowercase:
+        characters += string.ascii_lowercase
+    if use_digits:
+        characters += string.digits
+    if use_symbols:
+        characters += string.punctuation
 
-    website = str(website).replace(" ","")
-    # Repeat the username until it reaches a length of 6 characters
-    while len(username) < 6:
-        username += username
+    if not characters:
+        raise ValueError("At least one character type must be selected.")
 
-    # Repeat the website name until it reaches a length of 6 characters
-    while len(website) < 6:
-        website += website
-
-    # Take the first 6 characters of the username and website
-    username = username[:6]
-    website = website[:6]
-
-    # Extract the second letter of the password
-    second_letter = website[1].lower()
-
-    my_list = [
-        "apple", "ball", "cat", "dog", "elephant", "frog", "goat", "hat", "ink", "jacket",
-        "key", "lion", "mouse", "nest", "orange", "pen", "queen", "ring", "snake", "table",
-        "umbrella", "vase", "watch", "x-ray", "yo-yo", "zebra"
-    ]
-
-    second_letter_word = ""
-    for word in my_list:
-        if word[0].lower() == second_letter.lower():
-            second_letter_word = word
-
-    while len(second_letter_word) < 4:
-        second_letter_word += second_letter_word
-
-    # Extract the numerical representation of the second letter
-    second_letter_number = ord(second_letter) - 96
-
-    if second_letter_number < 10:
-        second_letter_number = "0" + str(second_letter_number)
-
-    second_pass_word = f"LOGU{website[:2]}".upper() if int(second_letter_number) % 2 == 0 else f"LOGX{website[:2]}".upper()
-
-    # Create the password
-    password = f"{website}@{second_pass_word}#{second_letter_word}{second_letter_number}"
-
-    # Adjust the password length to 20 characters
-    if len(password) < 20:
-        password += "!" * (20 - len(password))
-
-    password_entry.delete(0, 'end')
-    password_entry.insert(0, password)
+    return "".join(random.choice(characters) for _ in range(length))
 
 
 def encrypt_files_in_directory(directory, stored_main_password_hash):

@@ -1,10 +1,11 @@
 import customtkinter
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import clipboard
+import csv
+import json
 from PIL import Image
-from utils import (resource_path, generate_password, save_data, load_data, encrypt_data, decrypt_data,
-                   encrypt_files_in_directory, list_files_in_directory, decrypt_selected_files, decrypt_encrypted_word,
-                   generate_key, generate_encrypted_word)
+from utils import (resource_path, generate_random_password, save_data, load_data, encrypt_data, decrypt_data,
+                   decrypt_encrypted_word, generate_key, generate_encrypted_word)
 import os
 
 class PasswordManagerUI(customtkinter.CTk):
@@ -15,34 +16,40 @@ class PasswordManagerUI(customtkinter.CTk):
         self.salt = salt
         self.pattern = pattern
         self.stored_main_password_hash = None
+        self.vaults = ["Default"]
 
-        self.title("Secret Keeper")
-        self.geometry("450x500")
-        self.resizable(False, False)
+        self.title("Neox Password")
+        self.geometry("1024x768")
+        self.configure(fg_color="#CFC2E8")
+
+        customtkinter.set_appearance_mode("Dark")
 
         self.create_login_widgets()
 
     def create_login_widgets(self):
         self.clear_window()
 
-        self.login_frame = customtkinter.CTkFrame(self)
-        self.login_frame.pack(pady=150, padx=20, fill="both", expand=True)
+        self.login_frame = customtkinter.CTkFrame(self, fg_color="#141418", corner_radius=20)
+        self.login_frame.place(relx=0.5, rely=0.5, anchor="center")
+
+        title = customtkinter.CTkLabel(self.login_frame, text="Neox Password", font=("Poppins", 24, "bold"))
+        title.pack(pady=(40, 20), padx=100)
 
         self.label1_var = customtkinter.StringVar()
-        self.label1 = customtkinter.CTkLabel(self.login_frame, textvariable=self.label1_var, font=("Helvetica", 14))
+        self.label1 = customtkinter.CTkLabel(self.login_frame, textvariable=self.label1_var, font=("Poppins", 14))
         self.label1.pack(pady=10)
 
         self.password_var = customtkinter.StringVar()
-        self.entry_field = customtkinter.CTkEntry(self.login_frame, textvariable=self.password_var, font=("Helvetica", 12), show="*", width=200)
-        self.entry_field.pack(pady=5)
+        self.entry_field = customtkinter.CTkEntry(self.login_frame, textvariable=self.password_var, font=("Poppins", 12), show="*", width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
+        self.entry_field.pack(pady=5, padx=40)
         self.entry_field.bind('<Return>', self.login_or_setup)
 
-        self.button = customtkinter.CTkButton(self.login_frame, text="Enter", command=self.login_or_setup, width=100)
-        self.button.pack(pady=5)
+        self.button = customtkinter.CTkButton(self.login_frame, text="Enter", command=self.login_or_setup, width=100, corner_radius=10, fg_color="#7B6CFF", hover_color="#9B8CFF")
+        self.button.pack(pady=20)
 
         self.output_var = customtkinter.StringVar()
-        self.out_label = customtkinter.CTkLabel(self.login_frame, textvariable=self.output_var, font=("Helvetica", 12))
-        self.out_label.pack(pady=20)
+        self.out_label = customtkinter.CTkLabel(self.login_frame, textvariable=self.output_var, font=("Poppins", 12))
+        self.out_label.pack(pady=(0,40))
 
         self.set_label1_text()
 
@@ -70,6 +77,7 @@ class PasswordManagerUI(customtkinter.CTk):
     def main_password_checker(self):
         try:
             salt, encry_stored_main_password_hash = load_data(self.main_password_file)
+            self.salt = salt
             stored_main_password_hash = decrypt_encrypted_word(encry_stored_main_password_hash, pattern=self.pattern).encode()
 
             main_password = self.password_var.get()
@@ -78,449 +86,591 @@ class PasswordManagerUI(customtkinter.CTk):
             if main_password_hash == stored_main_password_hash:
                 self.output_var.set("Logging successful")
                 self.stored_main_password_hash = stored_main_password_hash
-                self.display_main_menu()
+                self.create_main_layout()
             else:
                 self.output_var.set("Incorrect password")
                 self.after(2000, lambda: self.output_var.set(""))
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {e}")
 
-    def display_main_menu(self):
-        self.clear_window()
-
-        menu_frame = customtkinter.CTkFrame(self)
-        menu_frame.pack(pady=30, padx=20, fill="both", expand=True)
-
-        menu_label = customtkinter.CTkLabel(menu_frame, text="Menu", font=("Helvetica", 14))
-        menu_label.pack(pady=10)
-
-        options = [
-            ("Create new credential", self.generate_password_menu),
-            ("Display saved passwords", self.load_password),
-            ("Edit saved password", self.edit_saved_password_menu),
-            ("Delete saved password", self.delete_saved_credentials),
-            ("Change main password", self.display_change_password),
-            ("Encrypt file", self.encrypt_files_menu),
-            ("Decrypt file", self.decrypt_files_menu)
-        ]
-
-        for option_text, option_command in options:
-            button = customtkinter.CTkButton(menu_frame, text=option_text, width=200, command=option_command)
-            button.pack(pady=5)
-
     def clear_window(self):
         for child in self.winfo_children():
             child.destroy()
 
-    def generate_password_menu(self):
+    def create_main_layout(self):
         self.clear_window()
 
-        label_main = customtkinter.CTkLabel(self, text="Create credential", font=("Helvetica", 18))
-        label_main.pack(pady=40)
+        main_container = customtkinter.CTkFrame(self, fg_color="#141418")
+        main_container.pack(fill="both", expand=True, padx=10, pady=10)
 
-        main_frame = customtkinter.CTkFrame(self)
-        main_frame.pack(padx=20, pady=10, fill="both", expand=True)
+        self.sidebar_frame = customtkinter.CTkFrame(main_container, width=150, fg_color="#181a1f", corner_radius=0)
+        self.sidebar_frame.pack(side="left", fill="y")
+
+        self.load_sidebar()
+
+        list_panel_frame = customtkinter.CTkFrame(main_container, fg_color="#141418")
+        list_panel_frame.pack(side="left", fill="both", expand=True, pady=10, padx=10)
+
+        top_bar_frame = customtkinter.CTkFrame(list_panel_frame, fg_color="transparent")
+        top_bar_frame.pack(fill="x", padx=20, pady=10)
+
+        self.search_bar = customtkinter.CTkEntry(top_bar_frame, placeholder_text="Buscar...", fg_color="#181a1f", border_width=0, corner_radius=10)
+        self.search_bar.pack(side="left", fill="x", expand=True, padx=(0,10))
+        self.search_bar.bind("<KeyRelease>", self.search_passwords)
+
+        add_password_button = customtkinter.CTkButton(top_bar_frame, text="+", width=30, corner_radius=10, fg_color="#7B6CFF", hover_color="#9B8CFF", command=self.add_password_window)
+        add_password_button.pack(side="left")
+
+        self.favorites_list_frame = customtkinter.CTkFrame(list_panel_frame, fg_color="transparent")
+        self.favorites_list_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        self.favorites_list = customtkinter.CTkScrollableFrame(self.favorites_list_frame, fg_color="transparent")
+        self.favorites_list.pack(fill="both", expand=True)
+
+        self.detail_panel_frame = customtkinter.CTkFrame(main_container, width=300, fg_color="#181a1f", corner_radius=0)
+        self.detail_panel_frame.pack(side="right", fill="y")
+
+        self.load_passwords_into_ui()
+
+    def load_sidebar(self):
+        for widget in self.sidebar_frame.winfo_children():
+            widget.destroy()
+
+        all_button = customtkinter.CTkButton(self.sidebar_frame, text="All", fg_color="transparent", command=lambda: self.load_passwords_into_ui())
+        all_button.pack(pady=10, padx=10)
+
+        vaults_label = customtkinter.CTkLabel(self.sidebar_frame, text="Vaults", font=("Poppins", 16, "bold"))
+        vaults_label.pack(pady=10)
+
+        for vault in self.vaults:
+            vault_button = customtkinter.CTkButton(self.sidebar_frame, text=vault, fg_color="transparent", command=lambda v=vault: self.filter_by_vault(v))
+            vault_button.pack(pady=5, padx=10)
+
+        manage_vaults_button = customtkinter.CTkButton(self.sidebar_frame, text="Manage Vaults", command=self.manage_vaults_window)
+        manage_vaults_button.pack(pady=10)
+
+
+        import_button = customtkinter.CTkButton(self.sidebar_frame, text="Import", command=self.import_passwords, fg_color="#7B6CFF", hover_color="#9B8CFF", corner_radius=10)
+        import_button.pack(pady=20, side="bottom")
+        export_button = customtkinter.CTkButton(self.sidebar_frame, text="Export", command=self.export_passwords, fg_color="#7B6CFF", hover_color="#9B8CFF", corner_radius=10)
+        export_button.pack(pady=10, side="bottom")
+
+    def add_password_window(self):
+        add_window = customtkinter.CTkToplevel(self)
+        add_window.title("Add New Password")
+        add_window.geometry("400x500")
+        add_window.transient(self)
+        add_window.grab_set()
+
+        main_frame = customtkinter.CTkFrame(add_window, fg_color="#141418")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         website_label = customtkinter.CTkLabel(main_frame, text="Website:")
-        website_label.grid(row=0, column=0, padx=10, pady=5, sticky="e")
-        website_entry = customtkinter.CTkEntry(main_frame, width=200)
-        website_entry.grid(row=0, column=1, padx=10, pady=5, sticky="w")
+        website_label.pack(pady=(10,0))
+        website_entry = customtkinter.CTkEntry(main_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
+        website_entry.pack()
 
         username_label = customtkinter.CTkLabel(main_frame, text="Username:")
-        username_label.grid(row=1, column=0, padx=10, pady=5, sticky="e")
-        username_entry = customtkinter.CTkEntry(main_frame, width=200)
-        username_entry.grid(row=1, column=1, padx=10, pady=5, sticky="w")
+        username_label.pack(pady=(10,0))
+        username_entry = customtkinter.CTkEntry(main_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
+        username_entry.pack()
 
-        password_label = customtkinter.CTkLabel(main_frame, text="Password:")
-        password_label.grid(row=2, column=0, padx=10, pady=5, sticky="e")
-        password_entry = customtkinter.CTkEntry(main_frame, width=200)
-        password_entry.grid(row=2, column=1, padx=10, pady=5, sticky="w")
+        vault_label = customtkinter.CTkLabel(main_frame, text="Vault:")
+        vault_label.pack(pady=(10,0))
+        vault_menu = customtkinter.CTkOptionMenu(main_frame, values=self.vaults, width=250, corner_radius=10, fg_color="#181a1f")
+        vault_menu.pack()
 
-        button_frame = customtkinter.CTkFrame(main_frame)
-        button_frame.grid(row=3, column=0, columnspan=2, pady=30)
+        category_label = customtkinter.CTkLabel(main_frame, text="Category:")
+        category_label.pack(pady=(10,0))
+        category_entry = customtkinter.CTkEntry(main_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
+        category_entry.pack()
 
-        generate_button = customtkinter.CTkButton(button_frame, text="Generate", width=100, command=lambda: generate_password(website_entry, username_entry, password_entry))
-        generate_button.grid(row=0, column=0, padx=5)
+        tags_label = customtkinter.CTkLabel(main_frame, text="Tags (comma-separated):")
+        tags_label.pack(pady=(10,0))
+        tags_entry = customtkinter.CTkEntry(main_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
+        tags_entry.pack()
 
-        save_button = customtkinter.CTkButton(button_frame, text="Save", width=100, command=lambda: self.save_password(website_entry, username_entry, password_entry))
-        save_button.grid(row=0, column=1, padx=5)
 
-        back_button = customtkinter.CTkButton(button_frame, text="Go Back", width=100, command=self.display_main_menu)
-        back_button.grid(row=0, column=2, padx=5)
+        password_frame = customtkinter.CTkFrame(main_frame, fg_color="transparent")
+        password_frame.pack(pady=(10,0))
+        password_label = customtkinter.CTkLabel(password_frame, text="Password:")
+        password_label.pack()
+        password_entry = customtkinter.CTkEntry(password_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
+        password_entry.pack(side="left", padx=(0,5))
+        generate_button = customtkinter.CTkButton(password_frame, text="Generate", width=80, corner_radius=10, fg_color="#7B6CFF", hover_color="#9B8CFF",
+                                                command=lambda: self.generate_password_window(password_entry))
+        generate_button.pack(side="left")
 
-    def save_password(self, website_entry, username_entry, password_entry):
+        save_button = customtkinter.CTkButton(main_frame, text="Save", width=100, corner_radius=10, fg_color="#7B6CFF", hover_color="#9B8CFF",
+                                            command=lambda: self.save_password(website_entry, username_entry, password_entry, category_entry, tags_entry, vault_menu, add_window))
+        save_button.pack(pady=20)
+
+
+    def save_password(self, website_entry, username_entry, password_entry, category_entry, tags_entry, vault_menu, window):
         website = website_entry.get().lower()
         username = username_entry.get()
         password = password_entry.get()
+        category = category_entry.get()
+        tags = [tag.strip() for tag in tags_entry.get().split(',')]
+        vault = vault_menu.get()
 
         if not website or not username or not password:
-            messagebox.showerror("Error", "Please fill in all fields.")
+            messagebox.showerror("Error", "Please fill in all fields.", parent=window)
             return
 
-        encrypted_data = encrypt_data(f"{username},{password}", self.stored_main_password_hash).decode()
-        if not os.path.exists(self.data_file):
-            save_data(f"{website}@{encrypted_data}", self.data_file)
-        else:
-            encrypt_password_data = load_data(self.data_file)
-            save_data(f"{encrypt_password_data},{website}@{encrypted_data}", self.data_file)
-
-        messagebox.showinfo("Success", "Changes have been saved successfully!")
-        website_entry.delete(0, 'end')
-        username_entry.delete(0, 'end')
-        password_entry.delete(0, 'end')
-
-    def load_password(self):
-        self.clear_window()
+        new_entry = {"username": username, "password": password, "category": category, "tags": tags, "vault": vault}
+        encrypted_entry = encrypt_data(new_entry, self.stored_main_password_hash)
 
         try:
-            encrypted_password_data = str(load_data(self.data_file))
-            saved_data = encrypted_password_data.split(",")
-        except FileNotFoundError:
-            saved_data = []
+            with open(self.data_file, 'r') as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
 
-        save_menu_frame = customtkinter.CTkFrame(self)
-        save_menu_frame.pack(pady=20, padx=20, fill="both", expand=True)
+        data[website] = encrypted_entry.decode('utf-8')
 
-        label = customtkinter.CTkLabel(save_menu_frame, text="Available credentials", font=("Helvetica", 18))
-        label.pack(pady=20)
+        with open(self.data_file, 'w') as f:
+            json.dump(data, f, indent=4)
 
-        scrollable_frame = customtkinter.CTkScrollableFrame(save_menu_frame)
-        scrollable_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        messagebox.showinfo("Success", "Password saved successfully!", parent=window)
+        self.load_passwords_into_ui()
+        self.load_sidebar()
+        window.destroy()
 
-        for x in saved_data:
-            data = x.split("@")
-            if len(data) >= 2:
-                button = customtkinter.CTkButton(scrollable_frame, text=data[0].capitalize(), command=lambda website=data[0], websites=saved_data: self.display_credentials(website, websites))
-                button.pack(fill="x", pady=5)
+    def edit_password_window(self, website, username, password, category, tags, vault):
+        edit_window = customtkinter.CTkToplevel(self)
+        edit_window.title("Edit Password")
+        edit_window.geometry("400x500")
+        edit_window.transient(self)
+        edit_window.grab_set()
 
-        back_button = customtkinter.CTkButton(save_menu_frame, text="Go Back", command=self.display_main_menu)
-        back_button.pack(pady=20)
-
-    def display_credentials(self, website, websites):
-        self.clear_window()
-
-        website_data = None
-        for x in websites:
-            data = x.split('@')
-            if len(data) >= 2 and data[0].lower() == website.lower():
-                website_data = data[1]
-                break
-
-        if website_data:
-            decrypted_data = decrypt_data(website_data.encode(), self.stored_main_password_hash)
-            if decrypted_data:
-                username, password = decrypted_data.split(",")
-
-                label = customtkinter.CTkLabel(self, text=str(website).capitalize(), font=("Helvetica", 24))
-                label.pack(pady=50)
-
-                username_frame = customtkinter.CTkFrame(self)
-                username_frame.pack(pady=5)
-                username_label = customtkinter.CTkLabel(username_frame, text="Username: " + username)
-                username_label.pack(side="left", padx=10)
-                copy_username_button = customtkinter.CTkButton(username_frame, text="Copy", command=lambda: clipboard.copy(username), width=50)
-                copy_username_button.pack(side="left")
-
-                password_frame = customtkinter.CTkFrame(self)
-                password_frame.pack(pady=5)
-                password_label = customtkinter.CTkLabel(password_frame, text="Password: " + password)
-                password_label.pack(side="left", padx=10)
-                copy_password_button = customtkinter.CTkButton(password_frame, text="Copy", command=lambda: clipboard.copy(password), width=50)
-                copy_password_button.pack(side="left")
-
-                back_button = customtkinter.CTkButton(self, text="Go Back", command=self.load_password)
-                back_button.pack(pady=20)
-            else:
-                messagebox.showerror("Error", "Invalid key. Please close the program and retry.")
-        else:
-            messagebox.showerror("Error", f"Sorry, credentials for {website} not found.")
-
-    def edit_saved_password_menu(self):
-        self.clear_window()
-
-        try:
-            encrypted_password_data = str(load_data(self.data_file))
-            saved_data = encrypted_password_data.split(",")
-        except FileNotFoundError:
-            saved_data = []
-
-        edit_menu_frame = customtkinter.CTkFrame(self)
-        edit_menu_frame.pack(pady=20, padx=20, fill="both", expand=True)
-
-        label = customtkinter.CTkLabel(edit_menu_frame, text="Edit credentials", font=("Helvetica", 18))
-        label.pack(pady=20)
-
-        scrollable_frame = customtkinter.CTkScrollableFrame(edit_menu_frame)
-        scrollable_frame.pack(fill="both", expand=True, padx=20, pady=10)
-
-        for index, x in enumerate(saved_data):
-            data = x.split("@")
-            if len(data) >= 2:
-                frame = customtkinter.CTkFrame(scrollable_frame)
-                frame.pack(fill="x", pady=2)
-
-                label = customtkinter.CTkLabel(frame, text=data[0].capitalize())
-                label.pack(side="left", padx=10)
-
-                edit_button = customtkinter.CTkButton(frame, text="Edit", width=50, command=lambda i=index, d=data: self.edit_credential(i, d))
-                edit_button.pack(side="right", padx=10)
-
-        back_button = customtkinter.CTkButton(edit_menu_frame, text="Go Back", command=self.display_main_menu)
-        back_button.pack(pady=20)
-
-    def edit_credential(self, index, data):
-        self.clear_window()
-        name, encrypted_data = data
-        decrypted_data = decrypt_data(encrypted_data.encode(), self.stored_main_password_hash)
-        username, password = decrypted_data.split(',')
-
-        label_main = customtkinter.CTkLabel(self, text="Edit credential", font=("Helvetica", 18))
-        label_main.pack(pady=40)
-
-        main_frame = customtkinter.CTkFrame(self)
-        main_frame.pack(padx=20, pady=10, fill="both", expand=True)
+        main_frame = customtkinter.CTkFrame(edit_window, fg_color="#141418")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
         website_label = customtkinter.CTkLabel(main_frame, text="Website:")
-        website_label.grid(row=0, column=0, padx=10, pady=5, sticky="e")
-        website_entry = customtkinter.CTkEntry(main_frame, width=200)
-        website_entry.insert(0, name)
-        website_entry.grid(row=0, column=1, padx=10, pady=5, sticky="w")
+        website_label.pack(pady=(10,0))
+        website_entry = customtkinter.CTkEntry(main_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
+        website_entry.insert(0, website)
+        website_entry.pack()
 
         username_label = customtkinter.CTkLabel(main_frame, text="Username:")
-        username_label.grid(row=1, column=0, padx=10, pady=5, sticky="e")
-        username_entry = customtkinter.CTkEntry(main_frame, width=200)
+        username_label.pack(pady=(10,0))
+        username_entry = customtkinter.CTkEntry(main_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
         username_entry.insert(0, username)
-        username_entry.grid(row=1, column=1, padx=10, pady=5, sticky="w")
+        username_entry.pack()
 
-        password_label = customtkinter.CTkLabel(main_frame, text="Password:")
-        password_label.grid(row=2, column=0, padx=10, pady=5, sticky="e")
-        password_entry = customtkinter.CTkEntry(main_frame, width=200)
+        vault_label = customtkinter.CTkLabel(main_frame, text="Vault:")
+        vault_label.pack(pady=(10,0))
+        vault_menu = customtkinter.CTkOptionMenu(main_frame, values=self.vaults, width=250, corner_radius=10, fg_color="#181a1f")
+        vault_menu.set(vault)
+        vault_menu.pack()
+
+        category_label = customtkinter.CTkLabel(main_frame, text="Category:")
+        category_label.pack(pady=(10,0))
+        category_entry = customtkinter.CTkEntry(main_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
+        category_entry.insert(0, category)
+        category_entry.pack()
+
+        tags_label = customtkinter.CTkLabel(main_frame, text="Tags (comma-separated):")
+        tags_label.pack(pady=(10,0))
+        tags_entry = customtkinter.CTkEntry(main_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
+        tags_entry.insert(0, ", ".join(tags))
+        tags_entry.pack()
+
+
+        password_frame = customtkinter.CTkFrame(main_frame, fg_color="transparent")
+        password_frame.pack(pady=(10,0))
+        password_label = customtkinter.CTkLabel(password_frame, text="Password:")
+        password_label.pack()
+        password_entry = customtkinter.CTkEntry(main_frame, width=250, corner_radius=10, fg_color="#181a1f", border_width=0)
         password_entry.insert(0, password)
-        password_entry.grid(row=2, column=1, padx=10, pady=5, sticky="w")
+        password_entry.pack(side="left", padx=(0,5))
+        generate_button = customtkinter.CTkButton(password_frame, text="Generate", width=80, corner_radius=10, fg_color="#7B6CFF", hover_color="#9B8CFF",
+                                                command=lambda: self.generate_password_window(password_entry))
+        generate_button.pack(side="left")
 
-        button_frame = customtkinter.CTkFrame(main_frame)
-        button_frame.grid(row=3, column=0, columnspan=2, pady=30)
 
-        save_button = customtkinter.CTkButton(button_frame, text="Save", width=100, command=lambda: self.save_edited_password(index, website_entry, username_entry, password_entry))
-        save_button.grid(row=0, column=0, padx=5)
+        save_button = customtkinter.CTkButton(main_frame, text="Save Changes", width=120, corner_radius=10, fg_color="#7B6CFF", hover_color="#9B8CFF",
+                                            command=lambda: self.save_edited_password(website, website_entry, username_entry, password_entry, category_entry, tags_entry, vault_menu, edit_window))
+        save_button.pack(pady=20)
 
-        back_button = customtkinter.CTkButton(button_frame, text="Go Back", width=100, command=self.edit_saved_password_menu)
-        back_button.grid(row=0, column=1, padx=5)
+    def save_edited_password(self, old_website, website_entry, username_entry, password_entry, category_entry, tags_entry, vault_menu, window):
+        new_website = website_entry.get().lower()
+        new_username = username_entry.get()
+        new_password = password_entry.get()
+        new_category = category_entry.get()
+        new_tags = [tag.strip() for tag in tags_entry.get().split(',')]
+        new_vault = vault_menu.get()
 
-    def save_edited_password(self, index, website_entry, username_entry, password_entry):
-        website = website_entry.get().lower()
-        username = username_entry.get()
-        password = password_entry.get()
-
-        if not website or not username or not password:
-            messagebox.showerror("Error", "Please fill in all fields.")
+        if not new_website or not new_username or not new_password:
+            messagebox.showerror("Error", "Please fill in all fields.", parent=window)
             return
 
-        encrypted_password_data = str(load_data(self.data_file))
-        saved_data = encrypted_password_data.split(",")
+        with open(self.data_file, 'r') as f:
+            data = json.load(f)
 
-        encrypted_data = encrypt_data(f"{username},{password}", self.stored_main_password_hash).decode()
-        saved_data[index] = f"{website}@{encrypted_data}"
+        if old_website in data:
+            del data[old_website]
 
-        save_data(",".join(saved_data), self.data_file)
-        messagebox.showinfo("Success", "Changes have been saved successfully!")
-        self.edit_saved_password_menu()
+        new_entry = {"username": new_username, "password": new_password, "category": new_category, "tags": new_tags, "vault": new_vault}
+        encrypted_entry = encrypt_data(new_entry, self.stored_main_password_hash)
+        data[new_website] = encrypted_entry.decode('utf-8')
 
-    def delete_saved_credentials(self):
-        self.clear_window()
+        with open(self.data_file, 'w') as f:
+            json.dump(data, f, indent=4)
+
+        messagebox.showinfo("Success", "Changes saved successfully!", parent=window)
+        self.load_passwords_into_ui()
+        self.load_sidebar()
+        self.display_details(new_website, new_username, new_password, new_category, new_tags, new_vault)
+        window.destroy()
+
+    def delete_password(self, website_to_delete):
+        if not messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete the password for {website_to_delete}?"):
+            return
+
+        with open(self.data_file, 'r') as f:
+            data = json.load(f)
+
+        if website_to_delete.lower() in data:
+            del data[website_to_delete.lower()]
+
+        with open(self.data_file, 'w') as f:
+            json.dump(data, f, indent=4)
+
+        messagebox.showinfo("Success", "Password deleted successfully!")
+        self.load_passwords_into_ui()
+        self.load_sidebar()
+
+        for widget in self.detail_panel_frame.winfo_children():
+            widget.destroy()
+
+
+    def load_passwords_into_ui(self, search_term=None, category_filter=None, vault_filter=None):
+        for widget in self.favorites_list.winfo_children():
+            widget.destroy()
 
         try:
-            encrypted_password_data = str(load_data(self.data_file))
-            saved_data = encrypted_password_data.split(",")
-        except FileNotFoundError:
-            saved_data = []
+            with open(self.data_file, 'r') as f:
+                password_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            password_data = {}
 
-        delete_menu_frame = customtkinter.CTkFrame(self)
-        delete_menu_frame.pack(pady=20, padx=20, fill="both", expand=True)
+        for website, encrypted_credential in password_data.items():
+            try:
+                decrypted_credential = decrypt_data(encrypted_credential.encode('utf-8'), self.stored_main_password_hash)
+                if not decrypted_credential: continue
 
-        label = customtkinter.CTkLabel(delete_menu_frame, text="Delete credentials", font=("Helvetica", 18))
-        label.pack(pady=20)
+                username = decrypted_credential.get('username', '')
+                password = decrypted_credential.get('password', '')
+                category = decrypted_credential.get('category', '')
+                tags = decrypted_credential.get('tags', [])
+                vault = decrypted_credential.get('vault', 'Default')
 
-        self.selected_to_delete = []
+                if search_term:
+                    if search_term.lower() not in website.lower() and \
+                       search_term.lower() not in username.lower() and \
+                       search_term.lower() not in category.lower() and \
+                       search_term.lower() not in "".join(tags).lower():
+                       continue
 
-        def on_checkbox_changed(var, name):
-            if var.get():
-                self.selected_to_delete.append(name)
-            else:
-                self.selected_to_delete.remove(name)
+                if category_filter and category != category_filter:
+                    continue
 
-        scrollable_frame = customtkinter.CTkScrollableFrame(delete_menu_frame)
-        scrollable_frame.pack(fill="both", expand=True, padx=20, pady=10)
+                if vault_filter and vault != vault_filter:
+                    continue
 
-        for x in saved_data:
-            name = x.split("@")[0]
-            var = customtkinter.BooleanVar()
-            checkbox = customtkinter.CTkCheckBox(scrollable_frame, text=name.capitalize(), variable=var, command=lambda v=var, n=name: on_checkbox_changed(v, n))
-            checkbox.pack(fill="x", pady=2)
 
-        button_frame = customtkinter.CTkFrame(delete_menu_frame)
-        button_frame.pack(pady=20)
+                item_frame = customtkinter.CTkFrame(self.favorites_list, fg_color="#181a1f", corner_radius=10)
+                item_frame.pack(fill="x", pady=5, padx=5)
 
-        delete_button = customtkinter.CTkButton(button_frame, text="Delete", width=100, command=self.confirm_deletion)
-        delete_button.pack(side="left", padx=10)
+                name_label = customtkinter.CTkLabel(item_frame, text=website.capitalize(), font=("Poppins", 14))
+                name_label.pack(side="left", padx=10, pady=10)
+                email_label = customtkinter.CTkLabel(item_frame, text=username, font=("Poppins", 12), text_color="gray")
+                email_label.pack(side="left", padx=10, pady=10)
 
-        back_button = customtkinter.CTkButton(button_frame, text="Go Back", width=100, command=self.display_main_menu)
-        back_button.pack(side="left", padx=10)
+                copy_icon = customtkinter.CTkButton(item_frame, text="📄", font=("Poppins", 16), width=30, fg_color="transparent", hover=False,
+                                                    command=lambda p=password: self.copy_to_clipboard(p))
+                copy_icon.pack(side="right", padx=10, pady=10)
 
-    def confirm_deletion(self):
-        if not self.selected_to_delete:
-            messagebox.showwarning("No Selection", "Please select a website to delete.")
+                item_frame.bind("<Button-1>", lambda event, w=website, u=username, p=password, c=category, t=tags, v=vault: self.display_details(w, u, p, c, t, v))
+                name_label.bind("<Button-1>", lambda event, w=website, u=username, p=password, c=category, t=tags, v=vault: self.display_details(w, u, p, c, t, v))
+                email_label.bind("<Button-1>", lambda event, w=website, u=username, p=password, c=category, t=tags, v=vault: self.display_details(w, u, p, c, t, v))
+
+            except (ValueError, AttributeError, TypeError) as e:
+                print(e)
+                continue
+
+    def display_details(self, website, username, password, category, tags, vault):
+        for widget in self.detail_panel_frame.winfo_children():
+            widget.destroy()
+
+        detail_title = customtkinter.CTkLabel(self.detail_panel_frame, text=website.capitalize(), font=("Poppins", 20, "bold"))
+        detail_title.pack(pady=20, padx=20, anchor="w")
+
+        fields = {
+            "Usuario/Email": username,
+            "Contraseña": "••••••••••••",
+            "Sitio web/App": f"{website}.com",
+            "Vault": vault,
+            "Categoría": category,
+        }
+
+        for label_text, value_text in fields.items():
+            field_frame = customtkinter.CTkFrame(self.detail_panel_frame, fg_color="transparent")
+            field_frame.pack(fill="x", padx=20, pady=10, anchor="w")
+
+            label = customtkinter.CTkLabel(field_frame, text=label_text, font=("Poppins", 12), text_color="gray")
+            label.pack(anchor="w")
+
+            value_frame = customtkinter.CTkFrame(field_frame, fg_color="transparent")
+            value_frame.pack(fill="x")
+
+            value = customtkinter.CTkLabel(value_frame, text=value_text, font=("Poppins", 14))
+            value.pack(side="left", anchor="w")
+
+            if label_text == "Contraseña":
+                copy_button = customtkinter.CTkButton(value_frame, text="📄", font=("Poppins", 16), width=30, fg_color="transparent", hover=False,
+                                                      command=lambda p=password: self.copy_to_clipboard(p))
+                copy_button.pack(side="left", padx=10)
+
+
+        tags_frame = customtkinter.CTkFrame(self.detail_panel_frame, fg_color="transparent")
+        tags_frame.pack(fill="x", padx=20, pady=10, anchor="w")
+        tags_label = customtkinter.CTkLabel(tags_frame, text="Tags", font=("Poppins", 12), text_color="gray")
+        tags_label.pack(anchor="w", pady=(0,5))
+
+        tag_buttons_frame = customtkinter.CTkFrame(tags_frame, fg_color="transparent")
+        tag_buttons_frame.pack(fill="x")
+        for tag in tags:
+            tag_button = customtkinter.CTkButton(tag_buttons_frame, text=tag, fg_color="#7B6CFF", hover=False, corner_radius=10, font=("Poppins", 10))
+            tag_button.pack(side="left", padx=(0,5))
+
+        actions_frame = customtkinter.CTkFrame(self.detail_panel_frame, fg_color="transparent")
+        actions_frame.pack(fill="x", padx=20, pady=20, anchor="s")
+
+        edit_button = customtkinter.CTkButton(actions_frame, text="Editar", fg_color="#7B6CFF", corner_radius=10,
+                                            command=lambda: self.edit_password_window(website, username, password, category, tags, vault))
+        edit_button.pack(side="left", padx=5)
+
+        delete_button = customtkinter.CTkButton(actions_frame, text="Delete", fg_color="#ff4d4d", corner_radius=10,
+                                              command=lambda: self.delete_password(website))
+        delete_button.pack(side="left", padx=5)
+
+        favorite_button = customtkinter.CTkButton(actions_frame, text="⭐", fg_color="transparent", font=("Poppins", 20))
+        favorite_button.pack(side="right", padx=5)
+
+    def copy_to_clipboard(self, text):
+        clipboard.copy(text)
+        messagebox.showinfo("Copied", "Password copied to clipboard.")
+
+    def import_passwords(self):
+        filepath = filedialog.askopenfilename(
+            title="Select a CSV file to import",
+            filetypes=(("CSV files", "*.csv"), ("All files", "*.*"))
+        )
+        if not filepath:
             return
 
-        confirm = messagebox.askyesno("Confirmation", "Are you sure you want to delete the selected website(s)?")
+        try:
+            with open(self.data_file, 'r') as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            data = {}
 
-        if not confirm:
+        try:
+            with open(filepath, 'r', newline='') as csvfile:
+                reader = csv.reader(csvfile)
+                header = next(reader)
+
+                count = 0
+                for row in reader:
+                    website = row[0]
+                    username = row[1]
+                    password = row[2]
+                    category = row[3] if len(row) > 3 else "Uncategorized"
+                    tags = [tag.strip() for tag in row[4].split(',')] if len(row) > 4 else []
+                    vault = row[5] if len(row) > 5 else "Default"
+
+                    new_entry = {"username": username, "password": password, "category": category, "tags": tags, "vault": vault}
+                    encrypted_entry = encrypt_data(new_entry, self.stored_main_password_hash)
+                    data[website.lower()] = encrypted_entry.decode('utf-8')
+                    count += 1
+
+            with open(self.data_file, 'w') as f:
+                json.dump(data, f, indent=4)
+
+            messagebox.showinfo("Success", f"{count} passwords imported successfully!")
+            self.load_passwords_into_ui()
+            self.load_sidebar()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred during import: {e}")
+
+
+    def export_passwords(self):
+        filepath = filedialog.asksaveasfilename(
+            title="Select a location to export the CSV file",
+            defaultextension=".csv",
+            filetypes=(("CSV files", "*.csv"), ("All files", "*.*"))
+        )
+        if not filepath:
             return
 
-        encrypted_password_data = str(load_data(self.data_file))
-        saved_data = encrypted_password_data.split(",")
+        try:
+            with open(self.data_file, 'r') as f:
+                password_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            password_data = {}
 
-        updated_data = [x for x in saved_data if x.split("@")[0] not in self.selected_to_delete]
+        try:
+            with open(filepath, 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["Website", "Username", "Password", "Category", "Tags", "Vault"])
 
-        save_data(",".join(updated_data), self.data_file)
+                for website, encrypted_credential in password_data.items():
+                    decrypted_credential = decrypt_data(encrypted_credential.encode('utf-8'), self.stored_main_password_hash)
+                    if not decrypted_credential: continue
 
-        messagebox.showinfo("Deletion Successful", f"The website(s) have been deleted.")
-        self.delete_saved_credentials()
+                    username = decrypted_credential.get('username', '')
+                    password = decrypted_credential.get('password', '')
+                    category = decrypted_credential.get('category', '')
+                    tags = decrypted_credential.get('tags', [])
+                    vault = decrypted_credential.get('vault', 'Default')
+                    writer.writerow([website, username, password, category, ", ".join(tags), vault])
 
-    def display_change_password(self):
-        self.clear_window()
-        change_password_frame = customtkinter.CTkFrame(self, corner_radius=10)
-        change_password_frame.pack(padx=20, pady=30, fill="both", expand=True)
+            messagebox.showinfo("Success", "Passwords exported successfully!")
 
-        title_label = customtkinter.CTkLabel(change_password_frame, text="Change Main Password", font=("Helvetica", 18, "bold"))
-        title_label.pack(pady=20)
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred during export: {e}")
 
-        current_password_label = customtkinter.CTkLabel(change_password_frame, text="Current Password:")
-        current_password_label.pack(pady=(10,0))
-        current_password_entry = customtkinter.CTkEntry(change_password_frame, show="*", width=250)
-        current_password_entry.pack()
+    def generate_password_window(self, password_entry):
+        gen_window = customtkinter.CTkToplevel(self)
+        gen_window.title("Generate Password")
+        gen_window.geometry("350x300")
+        gen_window.transient(self)
+        gen_window.grab_set()
 
-        new_password_label = customtkinter.CTkLabel(change_password_frame, text="New Password:")
-        new_password_label.pack(pady=(10,0))
-        new_password_entry = customtkinter.CTkEntry(change_password_frame, show="*", width=250)
-        new_password_entry.pack()
+        main_frame = customtkinter.CTkFrame(gen_window, fg_color="#141418")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        confirm_password_label = customtkinter.CTkLabel(change_password_frame, text="Confirm Password:")
-        confirm_password_label.pack(pady=(10,0))
-        confirm_password_entry = customtkinter.CTkEntry(change_password_frame, show="*", width=250)
-        confirm_password_entry.pack()
+        length_label = customtkinter.CTkLabel(main_frame, text="Length:")
+        length_label.pack(pady=(10,0))
+        length_slider = customtkinter.CTkSlider(main_frame, from_=8, to=32, number_of_steps=24)
+        length_slider.set(12)
+        length_slider.pack()
 
-        output_label = customtkinter.CTkLabel(change_password_frame, text="", font=("Helvetica", 12))
-        output_label.pack(pady=20)
+        uppercase_var = customtkinter.BooleanVar(value=True)
+        uppercase_check = customtkinter.CTkCheckBox(main_frame, text="Include Uppercase", variable=uppercase_var)
+        uppercase_check.pack(pady=5)
 
-        button_frame = customtkinter.CTkFrame(change_password_frame)
-        button_frame.pack(pady=20)
+        lowercase_var = customtkinter.BooleanVar(value=True)
+        lowercase_check = customtkinter.CTkCheckBox(main_frame, text="Include Lowercase", variable=lowercase_var)
+        lowercase_check.pack(pady=5)
 
-        change_password_button = customtkinter.CTkButton(button_frame, text="Change Password", command=lambda: self.change_main_password(current_password_entry, new_password_entry, confirm_password_entry, output_label))
-        change_password_button.pack(side="left", padx=10)
+        digits_var = customtkinter.BooleanVar(value=True)
+        digits_check = customtkinter.CTkCheckBox(main_frame, text="Include Digits", variable=digits_var)
+        digits_check.pack(pady=5)
 
-        back_button = customtkinter.CTkButton(button_frame, text="Back", command=self.display_main_menu)
-        back_button.pack(side="left", padx=10)
+        symbols_var = customtkinter.BooleanVar(value=True)
+        symbols_check = customtkinter.CTkCheckBox(main_frame, text="Include Symbols", variable=symbols_var)
+        symbols_check.pack(pady=5)
 
-    def change_main_password(self, current_password_entry, new_password_entry, confirm_password_entry, output_label):
-        current_password = current_password_entry.get()
-        new_password = new_password_entry.get()
-        confirm_password = confirm_password_entry.get()
+        def generate_and_apply():
+            length = int(length_slider.get())
+            use_uppercase = uppercase_var.get()
+            use_lowercase = lowercase_var.get()
+            use_digits = digits_var.get()
+            use_symbols = symbols_var.get()
 
-        current_password_hash = generate_key(current_password, self.salt)
+            try:
+                password = generate_random_password(length, use_uppercase, use_lowercase, use_digits, use_symbols)
+                password_entry.delete(0, 'end')
+                password_entry.insert(0, password)
+                gen_window.destroy()
+            except ValueError as e:
+                messagebox.showerror("Error", str(e), parent=gen_window)
 
-        if current_password_hash != self.stored_main_password_hash:
-            output_label.configure(text="Incorrect current password.")
-        elif new_password != confirm_password:
-            output_label.configure(text="New password and confirm password do not match.")
-        else:
-            new_password_hash = generate_key(new_password, self.salt)
-            encry_new_password_hash = generate_encrypted_word(new_password_hash.decode(), pattern=self.pattern)
+        generate_button = customtkinter.CTkButton(main_frame, text="Generate", width=100, corner_radius=10, fg_color="#7B6CFF", hover_color="#9B8CFF",
+                                                command=generate_and_apply)
+        generate_button.pack(pady=20)
 
-            save_data((self.salt, encry_new_password_hash), self.main_password_file)
-            self.update_data_with_new_key(current_password_hash, new_password_hash)
-            output_label.configure(text="Main password changed successfully. Restarting to apply changes.")
-            self.after(3000, self.destroy)
+    def search_passwords(self, event=None):
+        search_term = self.search_bar.get()
+        self.load_passwords_into_ui(search_term=search_term)
 
-    def update_data_with_new_key(self, old_key, new_key):
-        if os.path.exists(self.data_file):
-            encrypted_password_data = str(load_data(self.data_file))
-            saved_data = encrypted_password_data.split(",")
+    def filter_by_category(self, category):
+        self.load_passwords_into_ui(category_filter=category)
 
-            new_encrypted_data = []
+    def filter_by_vault(self, vault):
+        self.load_passwords_into_ui(vault_filter=vault)
 
-            for data in saved_data:
-                credential = data.split("@")
-                decrypted_data = str(decrypt_data(credential[1].encode(), old_key))
-                new_encrypted_data.append(f"{credential[0]}@{encrypt_data(decrypted_data, new_key).decode()}")
+    def manage_vaults_window(self):
+        manage_window = customtkinter.CTkToplevel(self)
+        manage_window.title("Manage Vaults")
+        manage_window.geometry("400x300")
+        manage_window.transient(self)
+        manage_window.grab_set()
 
-            save_data(",".join(new_encrypted_data), self.data_file)
+        main_frame = customtkinter.CTkFrame(manage_window, fg_color="#141418")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        directory = "data/files"
+        vault_list_frame = customtkinter.CTkScrollableFrame(main_frame, fg_color="transparent")
+        vault_list_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            if os.path.isfile(file_path) and filename.endswith('.encrypted'):
-                with open(file_path, "rb") as file:
-                    encrypt_file_data = file.read()
+        def refresh_vault_list():
+            for widget in vault_list_frame.winfo_children():
+                widget.destroy()
+            for vault in self.vaults:
+                vault_frame = customtkinter.CTkFrame(vault_list_frame, fg_color="#181a1f", corner_radius=10)
+                vault_frame.pack(fill="x", pady=5)
 
-                decrypted_data = decrypt_data(encrypt_file_data, old_key)
-                new_encrypt_data = encrypt_data(decrypted_data, new_key)
+                vault_label = customtkinter.CTkLabel(vault_frame, text=vault)
+                vault_label.pack(side="left", padx=10)
 
-                with open(file_path, 'wb') as file:
-                    file.write(new_encrypt_data)
+                if vault != "Default":
+                    delete_button = customtkinter.CTkButton(vault_frame, text="Delete", fg_color="#ff4d4d", width=60,
+                                                          command=lambda v=vault: delete_vault(v))
+                    delete_button.pack(side="right", padx=10)
 
-    def encrypt_files_menu(self):
-        directory = 'data/files'
-        encrypt_files_in_directory(directory, self.stored_main_password_hash)
+        refresh_vault_list()
 
-    def decrypt_files_menu(self):
-        self.clear_window()
-        directory = "data/files"
+        def add_vault():
+            dialog = customtkinter.CTkInputDialog(text="Enter new vault name:", title="Add Vault")
+            new_vault = dialog.get_input()
+            if new_vault and new_vault not in self.vaults:
+                self.vaults.append(new_vault)
+                refresh_vault_list()
+                self.load_sidebar()
 
-        decrypt_frame = customtkinter.CTkFrame(self)
-        decrypt_frame.pack(pady=20, padx=20, fill="both", expand=True)
+        def delete_vault(vault_to_delete):
+            if messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete the vault '{vault_to_delete}'? This will move all its passwords to the 'Default' vault."):
 
-        label = customtkinter.CTkLabel(decrypt_frame, text="Decrypt Files", font=("Helvetica", 18))
-        label.pack(pady=20)
+                try:
+                    with open(self.data_file, 'r') as f:
+                        password_data = json.load(f)
+                except (FileNotFoundError, json.JSONDecodeError):
+                    password_data = {}
 
-        file_listbox = customtkinter.CTkTextbox(decrypt_frame, width=350, height=200)
-        file_listbox.pack(pady=10)
+                for website, encrypted_credential in password_data.items():
+                    decrypted_credential = decrypt_data(encrypted_credential.encode('utf-8'), self.stored_main_password_hash)
+                    if decrypted_credential and decrypted_credential.get('vault') == vault_to_delete:
+                        decrypted_credential['vault'] = 'Default'
+                        encrypted_entry = encrypt_data(decrypted_credential, self.stored_main_password_hash)
+                        password_data[website] = encrypted_entry.decode('utf-8')
 
-        self.selected_files_to_decrypt = []
+                with open(self.data_file, 'w') as f:
+                    json.dump(password_data, f, indent=4)
 
-        def on_checkbox_changed(var, name):
-            if var.get():
-                self.selected_files_to_decrypt.append(name)
-            else:
-                self.selected_files_to_decrypt.remove(name)
+                self.vaults.remove(vault_to_delete)
+                refresh_vault_list()
+                self.load_sidebar()
+                self.load_passwords_into_ui()
 
-        scrollable_frame = customtkinter.CTkScrollableFrame(decrypt_frame)
-        scrollable_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        for filename in os.listdir(directory):
-            if os.path.isfile(os.path.join(directory, filename)) and filename.endswith('.encrypted'):
-                var = customtkinter.BooleanVar()
-                checkbox = customtkinter.CTkCheckBox(scrollable_frame, text=filename, variable=var, command=lambda v=var, n=filename: on_checkbox_changed(v,n))
-                checkbox.pack(fill="x", pady=2)
+        add_button = customtkinter.CTkButton(main_frame, text="Add Vault", command=add_vault)
+        add_button.pack(pady=10)
 
-        button_frame = customtkinter.CTkFrame(decrypt_frame)
-        button_frame.pack(pady=20)
 
-        decrypt_button = customtkinter.CTkButton(button_frame, text="Decrypt", command=lambda: self.decrypt_selected(directory))
-        decrypt_button.pack(side="left", padx=10)
-
-        back_button = customtkinter.CTkButton(button_frame, text="Back", command=self.display_main_menu)
-        back_button.pack(side="left", padx=10)
-
-    def decrypt_selected(self, directory):
-        if not self.selected_files_to_decrypt:
-            messagebox.showwarning("No Selection", "Please select files to decrypt.")
-            return
-
-        for file_name in self.selected_files_to_decrypt:
-            file_path = os.path.join(directory, file_name)
-            decrypt_file(file_path, self.stored_main_password_hash)
-
-        messagebox.showinfo("Success", f"{len(self.selected_files_to_decrypt)} file(s) decrypted successfully.")
-        self.decrypt_files_menu()
+if __name__ == '__main__':
+    app = PasswordManagerUI("data/password_data.json", "data/main_password.pickle", os.urandom(16), "453607")
+    app.mainloop()
